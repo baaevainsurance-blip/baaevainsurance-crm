@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>BAAEVA – CRM ACA (Sin instalación)</title>
+  <!-- Tailwind (CDN) -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- React 18 UMD + Babel for JSX (CDN) -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <!-- Lucide Icons (CDN) -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style> *{box-sizing:border-box} </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+  <div id="root" class="p-6"></div>
+
+  <script type="text/babel">
+    const { useState, useMemo, useEffect } = React;
+
+    const Button = (props) => <button {...props} className={"px-3 py-2 rounded-2xl shadow-sm border border-gray-200 hover:shadow transition text-sm " + (props.className||"")} />;
+    const Input  = (props) => <input {...props}  className={"w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring focus:ring-gray-200 " + (props.className||"")} />;
+    const Select = (props) => <select {...props} className={"w-full border border-gray-300 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring focus:ring-gray-200 " + (props.className||"")} />;
+
+    const uid = () => Math.random().toString(36).slice(2,9);
+    const emptyApplicant = { fullName:"", dob:"", sex:"", ssn:"", phone:"", email:"", address:"", requestsMarketplace:"", citizenship:"", docType:"", docNumber:"" };
+
+    function App(){
+      const [records,setRecords] = useState(()=>{ try{return JSON.parse(localStorage.getItem("baaeva_aca_crm")||"[]")}catch{return[]} });
+      const [draft,setDraft] = useState({ id:uid(), coverageYear:"", applicant:{...emptyApplicant}, household:[], incomes:[], currentCoverageNotes:"", employerCoverage:"", publicPrograms:"", losses:[], ineligible:[], createdAt:Date.now() });
+      useEffect(()=>localStorage.setItem("baaeva_aca_crm", JSON.stringify(records)),[records]);
+
+      const totalMonthly = useMemo(()=>draft.incomes.reduce((s,r)=>s+(parseFloat(r.monthlyGross)||0),0),[draft.incomes]);
+      const add = (key,row)=>setDraft(d=>({...d,[key]:[...d[key],row]}));
+      const rm  = (key,id)=>setDraft(d=>({...d,[key]:d[key].filter(x=>x.id!==id)}));
+      const upd = (key,id,patch)=>setDraft(d=>({...d,[key]:d[key].map(x=>x.id===id?{...x,...patch}:x)}));
+
+      const saveRecord=()=>{ setRecords(p=>[{...draft},...p]); setDraft({ id:uid(), coverageYear:"", applicant:{...emptyApplicant}, household:[], incomes:[], currentCoverageNotes:"", employerCoverage:"", publicPrograms:"", losses:[], ineligible:[], createdAt:Date.now() }); };
+
+      const esc=v=>`"${String(v??"").replace(/"/g,'""')}"`;
+      const toCSV=items=>{
+        const header=["id","coverageYear","applicantFullName","applicantDOB","sex","ssn","phone","email","address","requestsMarketplace","citizenship","docType","docNumber","employerCoverage","publicPrograms","currentCoverageNotes","householdJSON","incomesJSON","lossesJSON","ineligibleJSON"].join(",");
+        const rows=items.map(r=>[r.id,r.coverageYear,r.applicant.fullName,r.applicant.dob,r.applicant.sex,r.applicant.ssn,r.applicant.phone,r.applicant.email,r.applicant.address,r.applicant.requestsMarketplace,r.applicant.citizenship,r.applicant.docType,r.applicant.docNumber,r.employerCoverage,r.publicPrograms,r.currentCoverageNotes,JSON.stringify(r.household),JSON.stringify(r.incomes),JSON.stringify(r.losses),JSON.stringify(r.ineligible)].map(esc).join(","));
+        return header+"\\n"+rows.join("\\n");
+      };
+      const download=(fn,data,mime)=>{ const b=new Blob([data],{type:mime}); const u=URL.createObjectURL(b); const a=document.createElement("a"); a.href=u; a.download=fn; a.click(); setTimeout(()=>URL.revokeObjectURL(u),1500); };
+      const exportCSV=()=>download(`BAAEVA_ACA_CRM_${new Date().toISOString().slice(0,10)}.csv`, toCSV(records), "text/csv;charset=utf-8");
+      const exportJSON=()=>download(`BAAEVA_ACA_CRM_${new Date().toISOString().slice(0,10)}.json`, JSON.stringify(records,null,2), "application/json");
+      const importJSON=(e)=>{ const f=e.target.files?.[0]; if(!f)return; const r=new FileReader(); r.onload=()=>{ try{const data=JSON.parse(String(r.result)); if(Array.isArray(data)) setRecords(data);}catch{} }; r.readAsText(f); };
+
+      return (
+        <div className="max-w-6xl mx-auto space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-semibold">BAAEVA – CRM ACA</h1>
+              <p className="text-sm text-gray-600">Versión sin instalación (CDN).</p>
+            </div>
+            <div className="flex gap-2">
+              <Button onClick={saveRecord}>Guardar</Button>
+              <Button onClick={exportCSV}>CSV</Button>
+              <Button onClick={exportJSON}>JSON</Button>
+              <label className="px-3 py-2 rounded-2xl shadow-sm border border-gray-200 text-sm cursor-pointer">
+                Importar JSON <input type="file" accept="application/json" className="hidden" onChange={importJSON}/>
+              </label>
+            </div>
+          </div>
+
+          {/* Año y notas */}
+          <div className="bg-white rounded-2xl p-4 shadow-sm grid md:grid-cols-3 gap-3">
+            <div><label className="text-xs text-gray-600">Año de Cobertura</label><Input value={draft.coverageYear} onChange={e=>setDraft({...draft,coverageYear:e.target.value})} placeholder="YYYY"/></div>
+            <div className="md:col-span-2"><label className="text-xs text-gray-600">Notas de cobertura actual</label><Input value={draft.currentCoverageNotes} onChange={e=>setDraft({...draft,currentCoverageNotes:e.target.value})} placeholder="Nombre de plan, póliza, etc."/></div>
+          </div>
+
+          {/* Solicitante principal */}
+          <section className="bg-white rounded-2xl p-4 shadow-sm">
+            <h2 className="font-semibold mb-2">1) Solicitante principal</h2>
+            <div className="grid md:grid-cols-3 gap-3">
+              <div><label className="text-xs text-gray-600">Nombre completo</label><Input value={draft.applicant.fullName} onChange={e=>setDraft({...draft, applicant:{...draft.applicant, fullName:e.target.value}})}/></div>
+              <div><label className="text-xs text-gray-600">Fecha de nacimiento (MM/DD/YYYY)</label><Input value={draft.applicant.dob} onChange={e=>setDraft({...draft, applicant:{...draft.applicant, dob:e.target.value}})}/></div>
+              <div><label className="text-xs text-gray-600">Sexo</label><Select value={draft.applicant.sex} onChange={e=>setDraft({...draft, applicant:{...draft.applicant, sex:e.target.value}})}><option value="">Seleccione</option><option>Femenino</option><option>Masculino</option><option>Otro</option></Select></div>
+              <div><label className="text-xs text-gray-600">SSN</label><Input value={draft.applicant.ssn} onChange={e=>setDraft({...draft, applicant:{...draft.applicant, ssn:e.target.value}})}/></div>
+              <div><label className="text-xs text-gray-600">Teléfono</label><Input value={draft.applicant.phone} onChange={e=>setDraft({...draft, applicant:{...draft.applicant, phone:e.target.value}})}/></div>
+              <div><label className="text-xs text-gray-600">Correo</label><Input value={draft.applicant.email} onChange={e=>setDraft({...draft, applicant:{...draft.applicant, email:e.target.value}})}/></div>
+              <div className="md:col-span-3"><label className="text-xs text-gray-600">Dirección</label><Input value={draft.applicant.address} onChange={e=>setDraft({...draft, applicant:{...draft.applicant, address:e.target.value}})}/></div>
+              <div><label className="text-xs text-gray-600">¿Solicita cobertura Marketplace?</label><Select value={draft.applicant.requestsMarketplace} onChange={e=>setDraft({...draft, applicant:{...draft.applicant, requestsMarketplace:e.target.value}})}><option value="">Seleccione</option><option>Sí</option><option>No</option></Select></div>
+              <div><label className="text-xs text-gray-600">Ciudadanía / Estatus</label><Select value={draft.applicant.citizenship} onChange={e=>setDraft({...draft, applicant:{...draft.applicant, citizenship:e.target.value}})}><option value="">Seleccione</option><option>Ciudadano de EE. UU.</option><option>Residente Permanente (Green Card)</option><option>Otro</option></Select></div>
+              <div><label className="text-xs text-gray-600">Documento migratorio</label><Select value={draft.applicant.docType} onChange={e=>setDraft({...draft, applicant:{...draft.applicant, docType:e.target.value}})}><option value="">Seleccione</option><option>I-94</option><option>Permiso de Trabajo (EAD)</option><option>Parole / I-220A</option><option>Otro</option></Select></div>
+              <div><label className="text-xs text-gray-600">Número de documento</label><Input value={draft.applicant.docNumber} onChange={e=>setDraft({...draft, applicant:{...draft.applicant, docNumber:e.target.value}})}/></div>
+            </div>
+          </section>
+
+          {/* Hogar */}
+          <section className="bg-white rounded-2xl p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="font-semibold">2) Miembros del hogar</h2>
+              <Button onClick={()=>setDraft(d=>({...d,household:[...d.household,{ id:uid(), fullName:'', relation:'', dob:'', ssn:'', wantsCoverage:'', citizenship:'', docType:'', docNumber:'' }]}))}>Agregar miembro</Button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="bg-gray-100">{['Nombre','Relación','Fecha Nac.','SSN','¿Solicita S/N?','Ciudadanía','Doc migratorio','Nº documento',''].map(h=><th key={h} className="text-left p-2">{h}</th>)}</tr></thead>
+                <tbody>
+                  {draft.household.map(m=>(
+                    <tr key={m.id} className="border-b">
+                      <td className="p-2"><Input value={m.fullName} onChange={e=>upd('household', m.id, {fullName:e.target.value})}/></td>
+                      <td className="p-2"><Input value={m.relation} onChange={e=>upd('household', m.id, {relation:e.target.value})}/></td>
+                      <td className="p-2"><Input value={m.dob} onChange={e=>upd('household', m.id, {dob:e.target.value})}/></td>
+                      <td className="p-2"><Input value={m.ssn} onChange={e=>upd('household', m.id, {ssn:e.target.value})}/></td>
+                      <td className="p-2"><Select value={m.wantsCoverage} onChange={e=>upd('household', m.id, {wantsCoverage:e.target.value})}><option value="">Seleccione</option><option value="Y">S</option><option value="N">N</option></Select></td>
+                      <td className="p-2"><Input value={m.citizenship} onChange={e=>upd('household', m.id, {citizenship:e.target.value})}/></td>
+                      <td className="p-2"><Input value={m.docType} onChange={e=>upd('household', m.id, {docType:e.target.value})}/></td>
+                      <td className="p-2"><Input value={m.docNumber} onChange={e=>upd('household', m.id, {docNumber:e.target.value})}/></td>
+                      <td className="p-2 text-right"><Button className="text-red-600" onClick={()=>rm('household', m.id)}>Eliminar</Button></td>
+                    </tr>
+                  ))}
+                  {draft.household.length===0 && <tr><td colSpan={9} className="p-4 text-center text-gray-500">Sin miembros añadidos.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          {/* Ingresos */}
+          <section className="bg-white rounded-2xl p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="font-semibold">3) Ingresos del hogar</h2>
+              <Button onClick={()=>setDraft(d=>({...d,incomes:[...d.incomes,{ id:uid(), name:'', source:'', monthlyGross:'' }]}))}>Agregar ingreso</Button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="bg-gray-100">{['Nombre','Fuente','Ingreso mensual antes de impuestos',''].map(h=><th key={h} className="text-left p-2">{h}</th>)}</tr></thead>
+                <tbody>
+                  {draft.incomes.map(r=>(
+                    <tr key={r.id} className="border-b">
+                      <td className="p-2"><Input value={r.name} onChange={e=>upd('incomes', r.id, {name:e.target.value})}/></td>
+                      <td className="p-2"><Input value={r.source} onChange={e=>upd('incomes', r.id, {source:e.target.value})}/></td>
+                      <td className="p-2"><Input value={r.monthlyGross} onChange={e=>upd('incomes', r.id, {monthlyGross:e.target.value})}/></td>
+                      <td className="p-2 text-right"><Button className="text-red-600" onClick={()=>rm('incomes', r.id)}>Eliminar</Button></td>
+                    </tr>
+                  ))}
+                  {draft.incomes.length===0 && <tr><td colSpan={4} className="p-4 text-center text-gray-500">Sin ingresos registrados.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+            <div className="text-right text-sm mt-2">Total mensual estimado: <span className="font-semibold">${totalMonthly.toFixed(2)}</span></div>
+          </section>
+
+          {/* Cobertura actual */}
+          <section className="bg-white rounded-2xl p-4 shadow-sm">
+            <h2 className="font-semibold mb-2">4) Cobertura actual</h2>
+            <div className="grid md:grid-cols-3 gap-3">
+              <div><label className="text-xs text-gray-600">¿Cobertura por empleador?</label><Select value={draft.employerCoverage} onChange={e=>setDraft({...draft,employerCoverage:e.target.value})}><option value="">Seleccione</option><option>Sí</option><option>No</option></Select></div>
+              <div><label className="text-xs text-gray-600">¿Inscrito en Medicaid/Medicare/CHIP?</label><Select value={draft.publicPrograms} onChange={e=>setDraft({...draft,publicPrograms:e.target.value})}><option value="">Seleccione</option><option>Sí</option><option>No</option></Select></div>
+              <div className="md:col-span-1"><label className="text-xs text-gray-600">Notas (plan actual)</label><Input value={draft.currentCoverageNotes} onChange={e=>setDraft({...draft,currentCoverageNotes:e.target.value})}/></div>
+            </div>
+          </section>
+
+          {/* Pérdida de cobertura */}
+          <section className="bg-white rounded-2xl p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="font-semibold">5) Pérdida de cobertura (próx. 60 días)</h2>
+              <Button onClick={()=>setDraft(d=>({...d,losses:[...d.losses,{ id:uid(), memberName:'', planName:'', endDate:'' }]}))}>Agregar</Button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="bg-gray-100">{['Nombre del miembro','Nombre del plan actual','Fecha de finalización (MM/DD/YYYY)',''].map(h=><th key={h} className="text-left p-2">{h}</th>)}</tr></thead>
+                <tbody>
+                  {draft.losses.map(r=>(
+                    <tr key={r.id} className="border-b">
+                      <td className="p-2"><Input value={r.memberName} onChange={e=>upd('losses', r.id, {memberName:e.target.value})}/></td>
+                      <td className="p-2"><Input value={r.planName} onChange={e=>upd('losses', r.id, {planName:e.target.value})}/></td>
+                      <td className="p-2"><Input value={r.endDate} onChange={e=>upd('losses', r.id, {endDate:e.target.value})}/></td>
+                      <td className="p-2 text-right"><Button className="text-red-600" onClick={()=>rm('losses', r.id)}>Eliminar</Button></td>
+                    </tr>
+                  ))}
+                  {draft.losses.length===0 && <tr><td colSpan={4} className="p-4 text-center text-gray-500">Sin registros.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          {/* No elegible Medicaid/CHIP/KidCare */}
+          <section className="bg-white rounded-2xl p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="font-semibold">5.2) No elegible Medicaid/CHIP/KidCare</h2>
+              <Button onClick={()=>setDraft(d=>({...d,ineligible:[...d.ineligible,{ id:uid(), memberName:'', decisionDate:'' }]}))}>Agregar</Button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="bg-gray-100">{['Nombre del miembro','Fecha de determinación (MM/DD/YYYY)',''].map(h=><th key={h} className="text-left p-2">{h}</th>)}</tr></thead>
+                <tbody>
+                  {draft.ineligible.map(r=>(
+                    <tr key={r.id} className="border-b">
+                      <td className="p-2"><Input value={r.memberName} onChange={e=>upd('ineligible', r.id, {memberName:e.target.value})}/></td>
+                      <td className="p-2"><Input value={r.decisionDate} onChange={e=>upd('ineligible', r.id, {decisionDate:e.target.value})}/></td>
+                      <td className="p-2 text-right"><Button className="text-red-600" onClick={()=>rm('ineligible', r.id)}>Eliminar</Button></td>
+                    </tr>
+                  ))}
+                  {draft.ineligible.length===0 && <tr><td colSpan={3} className="p-4 text-center text-gray-500">Sin registros.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          {/* Guardados */}
+          <section className="bg-white rounded-2xl p-4 shadow-sm">
+            <h2 className="font-semibold mb-2">Clientes guardados</h2>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead><tr className="bg-gray-100">{['Fecha','Año','Solicitante','Teléfono','Email','Ingreso total','Hogar','Pérdidas','No elegible',''].map(h=><th key={h} className="text-left p-2">{h}</th>)}</tr></thead>
+                <tbody>
+                  {records.map(r=>(
+                    <tr key={r.id} className="border-b">
+                      <td className="p-2">{new Date(r.createdAt).toLocaleDateString()}</td>
+                      <td className="p-2">{r.coverageYear}</td>
+                      <td className="p-2">{r.applicant.fullName}</td>
+                      <td className="p-2">{r.applicant.phone}</td>
+                      <td className="p-2">{r.applicant.email}</td>
+                      <td className="p-2">${(r.incomes||[]).reduce((s,n)=>s+(parseFloat(n.monthlyGross)||0),0).toFixed(2)}</td>
+                      <td className="p-2">{r.household.length}</td>
+                      <td className="p-2">{r.losses.length}</td>
+                      <td className="p-2">{r.ineligible.length}</td>
+                      <td className="p-2 text-right"><Button className="text-red-600" onClick={()=>setRecords(prev=>prev.filter(x=>x.id!==r.id))}>Eliminar</Button></td>
+                    </tr>
+                  ))}
+                  {records.length===0 && <tr><td colSpan={10} className="p-4 text-center text-gray-500">Sin clientes guardados.</td></tr>}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex items-center justify-end gap-2 mt-2">
+              <Button onClick={()=>window.print()}>Imprimir/PDF</Button>
+            </div>
+          </section>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App/>);
+  </script>
+</body>
+</html>
